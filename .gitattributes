@@ -1,2 +1,5 @@
 # Auto detect text files and perform LF normalization.
 * text=auto
+Assets/AIB/Models/**/*.fbx filter=lfs diff=lfs merge=lfs -text
+Assets/AIB/Models/**/*.png filter=lfs diff=lfs merge=lfs -text
+Assets/AIB/Generated/*.fbx filter=lfs diff=lfs merge=lfs -text
