@@ -39,7 +39,7 @@ jobs:
         dotnet-version: '5.0'
 
     - name: Build with dotnet
-      run: dotnet build animal-ai-unity.sln --configuration Release
+      run: dotnet build AIB-nursery.slnx --configuration Release
 
 
     - name: Perform CodeQL Analysis

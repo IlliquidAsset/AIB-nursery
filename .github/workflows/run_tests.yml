@@ -1,4 +1,4 @@
-name: Test animal-ai-unity
+name: Test AIB-nursery
 
 on:
   pull_request:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   test-animal-ai:
-    name: Run Unity Tests on animal-ai-unity
+    name: Run Unity Tests on AIB-nursery
     runs-on: ubuntu-latest
     steps:
 
