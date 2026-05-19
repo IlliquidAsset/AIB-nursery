@@ -101,6 +101,12 @@ namespace YAMLDefs
         public List<int> blackouts { get; set; } = new List<int>();
         public int randomSeed { get; set; } = 0;
         public bool mergeNextArena { get; set; } = false;
+
+        [YamlMember(Alias = "agentModel")]
+        public string agentModel { get; set; } = "abe";
+
+        [YamlMember(Alias = "motherModel")]
+        public string motherModel { get; set; } = "mother";
     }
 
     /// <summary>

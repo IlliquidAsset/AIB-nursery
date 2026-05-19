@@ -30,8 +30,11 @@ public class TrainingAgent : Agent, IPrefab
     public float quickStopRatio = 0.9f;
     public float rotationSpeed = 100f;
     public float rotationAngle = 0.25f;
+    public bool useContinuousActions = false;  // Plan-086R Phase 3 gate (default OFF, legacy-safe)
     private int lastActionForward = 0;
     private int lastActionRotate = 0;
+    private float lastContinuousForward = 0f;
+    private float lastContinuousTurn = 0f;
 
     [Header("Agent State / Other Variables")]
     [HideInInspector]
@@ -264,12 +267,27 @@ public class TrainingAgent : Agent, IPrefab
 
     public override void OnActionReceived(ActionBuffers action)
     {
-        lastActionForward = Mathf.FloorToInt(action.DiscreteActions[0]);
-        lastActionRotate = Mathf.FloorToInt(action.DiscreteActions[1]);
-
-        if (!IsMovementFrozen())
+        if (useContinuousActions && action.ContinuousActions.Length >= 4)
         {
-            MoveAgent(lastActionForward, lastActionRotate);
+            float forward = Mathf.Clamp(action.ContinuousActions[0] + action.ContinuousActions[1], -1f, 1f);
+            float turn    = Mathf.Clamp(action.ContinuousActions[2] - action.ContinuousActions[3], -1f, 1f);
+            lastContinuousForward = forward;
+            lastContinuousTurn = turn;
+            lastActionForward = (forward > 0.3f) ? 1 : ((forward < -0.3f) ? 2 : 0);
+            lastActionRotate  = (turn > 0.3f)    ? 1 : ((turn < -0.3f)    ? 2 : 0);
+            if (!IsMovementFrozen())
+            {
+                MoveAgentContinuous(forward, turn);
+            }
+        }
+        else
+        {
+            lastActionForward = Mathf.FloorToInt(action.DiscreteActions[0]);
+            lastActionRotate = Mathf.FloorToInt(action.DiscreteActions[1]);
+            if (!IsMovementFrozen())
+            {
+                MoveAgent(lastActionForward, lastActionRotate);
+            }
         }
 
         Vector3 localVel = transform.InverseTransformDirection(_rigidBody.linearVelocity);
@@ -368,7 +386,19 @@ public class TrainingAgent : Agent, IPrefab
     {
         if (IsMovementFrozen())
         {
-            /* If the agent is frozen, stop all movement and rotation */
+            _rigidBody.linearVelocity = Vector3.zero;
+            _rigidBody.angularVelocity = Vector3.zero;
+            return;
+        }
+        MoveAgentContinuous(
+            actionForward == 1 ? 1f : (actionForward == 2 ? -1f : 0f),
+            actionRotate  == 1 ? 1f : (actionRotate  == 2 ? -1f : 0f));
+    }
+
+    private void MoveAgentContinuous(float forward, float turn)
+    {
+        if (IsMovementFrozen())
+        {
             _rigidBody.linearVelocity = Vector3.zero;
             _rigidBody.angularVelocity = Vector3.zero;
             return;
@@ -376,40 +406,26 @@ public class TrainingAgent : Agent, IPrefab
 
         Vector3 directionToGo = Vector3.zero;
         Vector3 rotateDirection = Vector3.zero;
-        Vector3 quickStop = Vector3.zero;
 
         if (_isGrounded)
         {
-            switch (actionForward)
+            if (Mathf.Abs(forward) > 0.01f)
             {
-                case 1:
-                    directionToGo = transform.forward * 1f;
-                    break;
-                case 2:
-                    directionToGo = transform.forward * -1f;
-                    break;
-                case 0: /* Slow down faster than drag with no input */
-                    quickStop = _rigidBody.linearVelocity * quickStopRatio;
-                    _rigidBody.linearVelocity = quickStop;
-                    break;
+                directionToGo = transform.forward * forward * speed * 100f * Time.fixedDeltaTime;
+            }
+            else
+            {
+                directionToGo = _rigidBody.linearVelocity * quickStopRatio;
             }
         }
 
-        switch (actionRotate)
+        if (Mathf.Abs(turn) > 0.01f)
         {
-            case 1:
-                rotateDirection = transform.up * 1f;
-                break;
-            case 2:
-                rotateDirection = transform.up * -1f;
-                break;
+            rotateDirection = transform.up * turn;
         }
 
         transform.Rotate(rotateDirection, Time.fixedDeltaTime * rotationSpeed);
-        _rigidBody.AddForce(
-            directionToGo.normalized * speed * 100f * Time.fixedDeltaTime,
-            ForceMode.Acceleration
-        );
+        _rigidBody.AddForce(directionToGo, ForceMode.Acceleration);
     }
 
     public override void Heuristic(in ActionBuffers actionsOut)

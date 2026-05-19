@@ -1,0 +1,17 @@
+{
+    "name": "AIB.Runtime",
+    "rootNamespace": "AIB",
+    "references": [
+        "Unity.TextMeshPro",
+        "Scripts"
+    ],
+    "includePlatforms": [],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

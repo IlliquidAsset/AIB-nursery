@@ -1,0 +1,116 @@
+using UnityEngine;
+
+namespace AIB
+{
+    public class AbeVisualController : MonoBehaviour
+    {
+#if EXPERIMENT_BUILD
+        public static bool DisableVisuals = false;
+#endif
+
+        [SerializeField] private GameObject agentMeshPrefab;
+
+        private SkinnedMeshRenderer _skinnedMeshRenderer;
+        private Animator _animator;
+        private GameObject _directionIndicator;
+
+        public Transform HeadBone { get; private set; }
+
+        private void Awake()
+        {
+            // // AIB-shader-null-patch-2026-05-08: skip visual setup in headless server build.
+            if (Application.isBatchMode || SystemInfo.graphicsDeviceType == UnityEngine.Rendering.GraphicsDeviceType.Null)
+            {
+                Debug.Log("[AIB] AbeVisualController: skipping visual setup in headless mode");
+                return;
+            }
+
+            if (agentMeshPrefab != null)
+            {
+                GameObject meshInstance = Instantiate(agentMeshPrefab, transform);
+                meshInstance.transform.localPosition = Vector3.zero;
+                meshInstance.transform.localRotation = Quaternion.identity;
+
+                _skinnedMeshRenderer = meshInstance.GetComponentInChildren<SkinnedMeshRenderer>();
+                _animator = meshInstance.GetComponentInChildren<Animator>();
+
+                if (_animator != null)
+                {
+                    if (_animator.isHuman)
+                    {
+                        HeadBone = _animator.GetBoneTransform(HumanBodyBones.Head);
+                    }
+                    else
+                    {
+                        Debug.LogWarning("AbeVisualController: Animator is Generic rig; skipping humanoid head bone lookup.");
+                    }
+                }
+                else
+                {
+                    Debug.LogWarning("AbeVisualController: Animator not found on instantiated prefab.");
+                }
+
+                if (_skinnedMeshRenderer == null)
+                {
+                    Debug.LogWarning("AbeVisualController: SkinnedMeshRenderer not found on instantiated prefab.");
+                }
+            }
+            else
+            {
+                Debug.LogWarning("AbeVisualController: agentMeshPrefab is not assigned.");
+            }
+
+            CreateDirectionIndicator();
+        }
+
+        private void CreateDirectionIndicator()
+        {
+            _directionIndicator = new GameObject("DirectionIndicator");
+            _directionIndicator.transform.SetParent(transform);
+            _directionIndicator.transform.localPosition = new Vector3(0, 2f, 0.5f);
+            _directionIndicator.transform.localRotation = Quaternion.identity;
+
+            GameObject cube = GameObject.CreatePrimitive(PrimitiveType.Cube);
+            cube.transform.SetParent(_directionIndicator.transform);
+            cube.transform.localPosition = new Vector3(0, 0, -0.25f);
+            cube.transform.localScale = new Vector3(0.1f, 0.1f, 0.5f);
+            Destroy(cube.GetComponent<Collider>());
+
+            GameObject tip = GameObject.CreatePrimitive(PrimitiveType.Sphere);
+            tip.transform.SetParent(_directionIndicator.transform);
+            tip.transform.localPosition = new Vector3(0, 0, 0.1f);
+            tip.transform.localScale = new Vector3(0.2f, 0.2f, 0.2f);
+            Destroy(tip.GetComponent<Collider>());
+
+            Material indicatorMat = new Material(Shader.Find("Universal Render Pipeline/Unlit"));
+            if (indicatorMat.shader == null) indicatorMat = new Material(Shader.Find("Unlit/Color"));
+            indicatorMat.color = Color.red;
+
+            cube.GetComponent<MeshRenderer>().material = indicatorMat;
+            tip.GetComponent<MeshRenderer>().material = indicatorMat;
+        }
+
+        public void SetVisible(bool visible)
+        {
+#if EXPERIMENT_BUILD
+            if (DisableVisuals) visible = false;
+#endif
+            if (_skinnedMeshRenderer != null)
+            {
+                _skinnedMeshRenderer.enabled = visible;
+            }
+
+            if (_directionIndicator != null)
+            {
+                _directionIndicator.SetActive(visible);
+            }
+        }
+
+        public void UpdateFromState(AbeStatePayload state)
+        {
+            if (_animator == null) return;
+
+            AbeAnimationMapper.ApplyState(_animator, state);
+        }
+    }
+}

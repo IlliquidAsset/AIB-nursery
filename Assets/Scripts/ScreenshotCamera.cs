@@ -10,7 +10,8 @@ public class ScreenshotCamera : MonoBehaviour
     [Header("Screenshot Settings")]
     public int fileCounter = 0;
     public RenderTexture renderTexture;
-    public string filePath = "Screenshots";
+    // AIB-screenshot-route-072 2026-05-07: canonical AIB SmokeRenders folder.
+    public string filePath = "Assets/AIB/SmokeRenders";
     public string fileName = "capture";
     private Camera screenshotCam;
     public bool testMode = false;
@@ -95,7 +96,27 @@ public class ScreenshotCamera : MonoBehaviour
         byte[] bytes = image.EncodeToPNG();
         Destroy(image);
 
-        string directoryPath = Path.Combine(Application.persistentDataPath, filePath);
+        // AIB-screenshot-route-072 2026-05-07: route screenshots to the
+        // canonical AIB SmokeRenders folder. Absolute filePath used as-is;
+        // relative filePath resolved under the project root (or the build's
+        // dataPath parent at runtime). Never Application.persistentDataPath.
+        string directoryPath;
+        if (Path.IsPathRooted(filePath))
+        {
+            directoryPath = filePath;
+        }
+        else
+        {
+#if UNITY_EDITOR
+            // Project root = parent of Application.dataPath ("Assets")
+            directoryPath = Path.Combine(Path.GetDirectoryName(Application.dataPath), filePath);
+#else
+            // Runtime in built player: hardcoded canonical location matches
+            // /Volumes/Video/AIB-nursery/Assets/AIB/SmokeRenders, which is
+            // the same location used by the editor smoke. Honors inbox 072.
+            directoryPath = "/Volumes/Video/AIB-nursery/" + filePath;
+#endif
+        }
         Directory.CreateDirectory(directoryPath);
 
         string formattedFileName =

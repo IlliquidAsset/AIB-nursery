@@ -1,0 +1,19 @@
+{
+    "name": "AIB.Editor",
+    "rootNamespace": "AIB.Editor",
+    "references": [
+        "AIB.Runtime",
+        "Scripts"
+    ],
+    "includePlatforms": [
+        "Editor"
+    ],
+    "excludePlatforms": [],
+    "allowUnsafeCode": false,
+    "overrideReferences": false,
+    "precompiledReferences": [],
+    "autoReferenced": true,
+    "defineConstraints": [],
+    "versionDefines": [],
+    "noEngineReferences": false
+}

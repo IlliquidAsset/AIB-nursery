@@ -1,0 +1,474 @@
+#if !EXPERIMENT_BUILD
+using System;
+using System.Collections;
+using System.Collections.Generic;
+using System.Globalization;
+using System.IO;
+using UnityEngine;
+
+#if UNITY_EDITOR && AIB_ENABLE_REPLAY_RECORDER
+using UnityEditor.Recorder;
+using UnityEditor.Recorder.Encoder;
+using UnityEditor.Recorder.Input;
+#endif
+
+/// <summary>
+/// CSV replay controller for observer/standalone workflows.
+/// </summary>
+public class ReplayController : MonoBehaviour
+{
+    [Header("Replay CSV")]
+    [SerializeField] private string replayCsvPath = string.Empty;
+    [SerializeField] private float interpolationT = 0.5f;
+    [SerializeField] private float episodePauseSeconds = 1f;
+
+    [Header("Scene References (optional)")]
+    [SerializeField] private Transform agentTransform;
+    [SerializeField] private GameObject motherGameObject;
+    [SerializeField] private Camera observerCameraNE;
+
+    private readonly List<ReplayRow> _rows = new List<ReplayRow>();
+
+#if UNITY_EDITOR && AIB_ENABLE_REPLAY_RECORDER
+    private RecorderController _recorderController;
+#endif
+
+    private bool _hasMotherPositionColumns;
+    private bool _hasMotherActiveColumn;
+    private bool _replayStarted;
+
+    private struct ReplayRow
+    {
+        public int Episode;
+        public Vector3 AgentPosition;
+        public Vector3 MotherPosition;
+        public bool MotherActive;
+    }
+
+    private void Awake()
+    {
+        ParseReplayCsvCliArg();
+    }
+
+    private void Start()
+    {
+        if (!ResolveReferences())
+        {
+            return;
+        }
+
+        if (!LoadCsvRows())
+        {
+            return;
+        }
+
+        StartReplay();
+    }
+
+    private void ParseReplayCsvCliArg()
+    {
+        string[] args = Environment.GetCommandLineArgs();
+        for (int i = 0; i < args.Length; i++)
+        {
+            switch (args[i])
+            {
+                case "--replayCSV":
+                    replayCsvPath = (i < args.Length - 1) ? args[i + 1] : replayCsvPath;
+                    break;
+            }
+        }
+    }
+
+    private bool ResolveReferences()
+    {
+        if (agentTransform == null)
+        {
+            GameObject agentObject = GameObject.Find("AAI3Agent");
+            if (agentObject != null)
+            {
+                agentTransform = agentObject.transform;
+            }
+        }
+
+        if (motherGameObject == null)
+        {
+            GameObject motherObject = GameObject.Find("Mother");
+            if (motherObject != null)
+            {
+                motherGameObject = motherObject;
+            }
+        }
+
+        if (observerCameraNE == null)
+        {
+            GameObject observer = GameObject.Find("ObserverCameraNE");
+            if (observer != null)
+            {
+                observerCameraNE = observer.GetComponent<Camera>();
+            }
+        }
+
+        if (agentTransform == null)
+        {
+            Debug.LogError("ReplayController: Unable to locate AAI3Agent transform.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private bool LoadCsvRows()
+    {
+        if (string.IsNullOrWhiteSpace(replayCsvPath))
+        {
+            Debug.LogWarning("ReplayController: --replayCSV not provided; replay will not start.");
+            return false;
+        }
+
+        if (!File.Exists(replayCsvPath))
+        {
+            Debug.LogError($"ReplayController: CSV file not found: {replayCsvPath}");
+            return false;
+        }
+
+        string[] allLines = File.ReadAllLines(replayCsvPath);
+        if (allLines.Length < 2)
+        {
+            Debug.LogError("ReplayController: CSV is empty or missing data rows.");
+            return false;
+        }
+
+        List<string> headerFields = ParseCsvLine(allLines[0]);
+        Dictionary<string, int> header = BuildHeaderMap(headerFields);
+
+        if (!TryGetIndex(header, "Episode", out int episodeIndex)
+            || !TryGetIndex(header, "XPosition", out int xPosIndex)
+            || !TryGetIndex(header, "YPosition", out int yPosIndex)
+            || !TryGetIndex(header, "ZPosition", out int zPosIndex))
+        {
+            Debug.LogError("ReplayController: Missing required replay columns (Episode/XPosition/YPosition/ZPosition).");
+            return false;
+        }
+
+        bool hasMotherX = TryGetIndex(header, "MotherX", out int motherXIndex);
+        bool hasMotherY = TryGetIndex(header, "MotherY", out int motherYIndex);
+        bool hasMotherZ = TryGetIndex(header, "MotherZ", out int motherZIndex);
+        _hasMotherPositionColumns = hasMotherX && hasMotherY && hasMotherZ;
+        _hasMotherActiveColumn = TryGetIndex(header, "MotherActive", out int motherActiveIndex);
+
+        if (!_hasMotherPositionColumns)
+        {
+            Debug.LogWarning("ReplayController: Mother position columns not found; mother movement playback disabled.");
+        }
+
+        if (!_hasMotherActiveColumn)
+        {
+            Debug.LogWarning("ReplayController: MotherActive column not found; mother visibility playback disabled.");
+        }
+
+        _rows.Clear();
+        for (int i = 1; i < allLines.Length; i++)
+        {
+            if (string.IsNullOrWhiteSpace(allLines[i]))
+            {
+                continue;
+            }
+
+            List<string> fields = ParseCsvLine(allLines[i]);
+
+            ReplayRow row = new ReplayRow
+            {
+                Episode = ParseInt(GetField(fields, episodeIndex), 0),
+                AgentPosition = new Vector3(
+                    ParseFloat(GetField(fields, xPosIndex), 0f),
+                    ParseFloat(GetField(fields, yPosIndex), 0f),
+                    ParseFloat(GetField(fields, zPosIndex), 0f)
+                ),
+                MotherPosition = Vector3.zero,
+                MotherActive = true
+            };
+
+            if (_hasMotherPositionColumns)
+            {
+                row.MotherPosition = new Vector3(
+                    ParseFloat(GetField(fields, motherXIndex), 0f),
+                    ParseFloat(GetField(fields, motherYIndex), 0f),
+                    ParseFloat(GetField(fields, motherZIndex), 0f)
+                );
+            }
+
+            if (_hasMotherActiveColumn)
+            {
+                row.MotherActive = ParseBool(GetField(fields, motherActiveIndex), true);
+            }
+
+            _rows.Add(row);
+        }
+
+        if (_rows.Count == 0)
+        {
+            Debug.LogError("ReplayController: No valid replay rows were loaded.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private void StartReplay()
+    {
+        if (_replayStarted)
+        {
+            return;
+        }
+
+        _replayStarted = true;
+        ConfigureAndStartRecorder();
+        StartCoroutine(ReplayRoutine());
+    }
+
+    private IEnumerator ReplayRoutine()
+    {
+        ReplayRow previous = _rows[0];
+        ApplyDirect(previous);
+
+        int currentEpisode = previous.Episode;
+
+        for (int i = 1; i < _rows.Count; i++)
+        {
+            ReplayRow current = _rows[i];
+            if (current.Episode != currentEpisode)
+            {
+                currentEpisode = current.Episode;
+                ApplyDirect(current);
+                previous = current;
+                yield return new WaitForSeconds(episodePauseSeconds);
+                continue;
+            }
+
+            ApplyInterpolated(previous, current);
+            previous = current;
+            yield return new WaitForFixedUpdate();
+        }
+
+        StopRecorder();
+    }
+
+    private void ApplyDirect(ReplayRow row)
+    {
+        agentTransform.position = row.AgentPosition;
+
+        if (motherGameObject != null)
+        {
+            if (_hasMotherPositionColumns)
+            {
+                motherGameObject.transform.position = row.MotherPosition;
+            }
+
+            if (_hasMotherActiveColumn)
+            {
+                motherGameObject.SetActive(row.MotherActive);
+            }
+        }
+    }
+
+    private void ApplyInterpolated(ReplayRow from, ReplayRow to)
+    {
+        float t = Mathf.Clamp01(interpolationT);
+        agentTransform.position = Vector3.Lerp(from.AgentPosition, to.AgentPosition, t);
+
+        if (motherGameObject != null)
+        {
+            if (_hasMotherPositionColumns)
+            {
+                motherGameObject.transform.position = Vector3.Lerp(from.MotherPosition, to.MotherPosition, t);
+            }
+
+            if (_hasMotherActiveColumn)
+            {
+                motherGameObject.SetActive(to.MotherActive);
+            }
+        }
+    }
+
+#if UNITY_EDITOR && AIB_ENABLE_REPLAY_RECORDER
+    private string _previousObserverCameraTag;
+
+    private void ConfigureAndStartRecorder()
+    {
+        if (observerCameraNE == null)
+        {
+            Debug.LogWarning("ReplayController: ObserverCameraNE camera not found; recorder setup skipped.");
+            return;
+        }
+
+        string basePath = Application.isEditor
+            ? Path.GetFullPath(Path.Combine(Application.dataPath, ".."))
+            : Path.GetDirectoryName(Application.dataPath);
+
+        string replayDirectory = Path.Combine(basePath, "Builds", "Replays");
+        Directory.CreateDirectory(replayDirectory);
+
+        var movieRecorder = ScriptableObject.CreateInstance<MovieRecorderSettings>();
+        movieRecorder.name = "Replay MP4 Recorder";
+        movieRecorder.Enabled = true;
+        movieRecorder.OutputFile = Path.Combine(replayDirectory, $"Replay_{DateTime.Now:yyyyMMdd_HHmmss}");
+        movieRecorder.CaptureAudio = false;
+
+        _previousObserverCameraTag = observerCameraNE.tag;
+        observerCameraNE.tag = "MainCamera";
+
+        movieRecorder.ImageInputSettings = new CameraInputSettings
+        {
+            Source = ImageSource.MainCamera,
+            CameraTag = "MainCamera",
+            OutputWidth = 1920,
+            OutputHeight = 1080
+        };
+        movieRecorder.EncoderSettings = new CoreEncoderSettings
+        {
+            Codec = CoreEncoderSettings.OutputCodec.H264,
+            EncodingProfile = CoreEncoderSettings.H264EncodingProfile.Auto,
+            EncodingQuality = CoreEncoderSettings.VideoEncodingQuality.High
+        };
+
+        var controllerSettings = ScriptableObject.CreateInstance<RecorderControllerSettings>();
+        controllerSettings.SetRecordModeToManual();
+        controllerSettings.FrameRatePlayback = FrameRatePlayback.Constant;
+        controllerSettings.FrameRate = 30.0f;
+        controllerSettings.CapFrameRate = true;
+        controllerSettings.AddRecorderSettings(movieRecorder);
+
+        _recorderController = new RecorderController(controllerSettings);
+        _recorderController.PrepareRecording();
+        _recorderController.StartRecording();
+    }
+
+    private void StopRecorder()
+    {
+        if (_recorderController != null && _recorderController.IsRecording())
+        {
+            _recorderController.StopRecording();
+        }
+
+        if (observerCameraNE != null && !string.IsNullOrEmpty(_previousObserverCameraTag))
+        {
+            observerCameraNE.tag = _previousObserverCameraTag;
+        }
+    }
+#else
+    private void ConfigureAndStartRecorder() { }
+    private void StopRecorder() { }
+#endif
+
+    private static Dictionary<string, int> BuildHeaderMap(List<string> headerFields)
+    {
+        var map = new Dictionary<string, int>(StringComparer.Ordinal);
+        for (int i = 0; i < headerFields.Count; i++)
+        {
+            string key = headerFields[i].Trim();
+            if (!map.ContainsKey(key))
+            {
+                map.Add(key, i);
+            }
+        }
+
+        return map;
+    }
+
+    private static bool TryGetIndex(Dictionary<string, int> map, string key, out int index)
+    {
+        return map.TryGetValue(key, out index);
+    }
+
+    private static List<string> ParseCsvLine(string line)
+    {
+        var fields = new List<string>();
+        if (line == null)
+        {
+            fields.Add(string.Empty);
+            return fields;
+        }
+
+        bool inQuotes = false;
+        int start = 0;
+
+        for (int i = 0; i < line.Length; i++)
+        {
+            char c = line[i];
+            if (c == '"')
+            {
+                if (inQuotes && i + 1 < line.Length && line[i + 1] == '"')
+                {
+                    i++;
+                    continue;
+                }
+
+                inQuotes = !inQuotes;
+            }
+            else if (c == ',' && !inQuotes)
+            {
+                fields.Add(UnwrapCsvField(line.Substring(start, i - start)));
+                start = i + 1;
+            }
+        }
+
+        fields.Add(UnwrapCsvField(line.Substring(start)));
+        return fields;
+    }
+
+    private static string UnwrapCsvField(string field)
+    {
+        string value = field.Trim();
+        if (value.Length >= 2 && value[0] == '"' && value[value.Length - 1] == '"')
+        {
+            value = value.Substring(1, value.Length - 2);
+        }
+
+        return value.Replace("\"\"", "\"");
+    }
+
+    private static string GetField(List<string> fields, int index)
+    {
+        if (index < 0 || index >= fields.Count)
+        {
+            return string.Empty;
+        }
+
+        return fields[index];
+    }
+
+    private static int ParseInt(string raw, int fallback)
+    {
+        return int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out int value)
+            ? value
+            : fallback;
+    }
+
+    private static float ParseFloat(string raw, float fallback)
+    {
+        return float.TryParse(raw, NumberStyles.Float, CultureInfo.InvariantCulture, out float value)
+            ? value
+            : fallback;
+    }
+
+    private static bool ParseBool(string raw, bool fallback)
+    {
+        if (string.IsNullOrWhiteSpace(raw))
+        {
+            return fallback;
+        }
+
+        if (bool.TryParse(raw, out bool parsedBool))
+        {
+            return parsedBool;
+        }
+
+        if (int.TryParse(raw, NumberStyles.Integer, CultureInfo.InvariantCulture, out int parsedInt))
+        {
+            return parsedInt != 0;
+        }
+
+        return fallback;
+    }
+}
+#endif

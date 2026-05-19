@@ -139,6 +139,8 @@ namespace ArenasParameters
         public int randomSeed = 0;
         public bool mergeNextArena = false;
         public float passMark = 0;
+        public string agentModel = "abe";
+        public string motherModel = "mother";
 
         public ArenaConfiguration() { }
 
@@ -157,6 +159,8 @@ namespace ArenasParameters
             TimeLimit = yamlArena.timeLimit;
             passMark = yamlArena.passMark;
             spawnables = new List<Spawnable>();
+            agentModel = string.IsNullOrWhiteSpace(yamlArena.agentModel) ? "abe" : yamlArena.agentModel;
+            motherModel = string.IsNullOrWhiteSpace(yamlArena.motherModel) ? "mother" : yamlArena.motherModel;
 
             foreach (YAMLDefs.Item item in yamlArena.items)
             {

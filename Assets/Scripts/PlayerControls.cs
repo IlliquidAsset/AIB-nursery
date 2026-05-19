@@ -131,7 +131,26 @@ public class PlayerControls : MonoBehaviour
 
     private void HandleInput()
     {
-        if (canChangePerspective && Input.GetKeyDown(KeyCode.C))
+        // AIB-observer-patch-playercontrols: gate the legacy C-key cycle on
+        // AIB.CameraController.BroadcastModeActive (read via reflection since
+        // Scripts.asmdef doesn't reference AIB.Runtime).
+        bool _aibObserverActive = false;
+        try
+        {
+            var _t = System.Type.GetType("AIB.CameraController, AIB.Runtime");
+            if (_t != null)
+            {
+                var _p = _t.GetProperty("BroadcastModeActive",
+                    System.Reflection.BindingFlags.Public | System.Reflection.BindingFlags.Static);
+                if (_p != null)
+                {
+                    var _v = _p.GetValue(null);
+                    if (_v is bool _b) _aibObserverActive = _b;
+                }
+            }
+        }
+        catch { /* fall through, keep legacy behavior */ }
+        if (canChangePerspective && !_aibObserverActive && Input.GetKeyDown(KeyCode.C))
         {
             CycleCamera();
         }
