@@ -1,11 +1,11 @@
 ﻿<Solution>
-  <Project Path="YamlDotNet.csproj" />
   <Project Path="Scripts.csproj" />
-  <Project Path="YamlDotNet.Examples.csproj" />
+  <Project Path="YamlDotNet.csproj" />
   <Project Path="Playmode.csproj" />
-  <Project Path="EditMode.csproj" />
   <Project Path="Assembly-CSharp.csproj" />
-  <Project Path="AIB.Runtime.csproj" />
+  <Project Path="EditMode.csproj" />
   <Project Path="AIB.Editor.csproj" />
+  <Project Path="YamlDotNet.Examples.csproj" />
+  <Project Path="AIB.Runtime.csproj" />
   <Project Path="Assembly-CSharp-Editor.csproj" />
 </Solution>

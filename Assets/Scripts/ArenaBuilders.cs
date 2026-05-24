@@ -642,7 +642,7 @@ namespace ArenaBuilders
             }
             else
             {
-                Debug.LogError($"Failed to find PositionRotation for object: {gameObjectInstance.name} (InstanceID: {gameObjectInstance.GetInstanceID()})");
+                Debug.LogError($"Failed to find PositionRotation for object: {gameObjectInstance.name} (InstanceID: {gameObjectInstance.GetEntityId()})");
             }
             return null;
         }
