@@ -4,6 +4,7 @@ using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
 using UnityEngine;
 using System.Collections.Generic;
+using System.IO;
 
 namespace AIB.Editor
 {
@@ -170,6 +171,116 @@ namespace AIB.Editor
             {
                 PlayerSettings.SetArchitecture(namedBuildTarget, previousArchitecture);
             }
+        }
+
+        [MenuItem("AIB/Build/Build Supine Crib Body Schema (macOS)")]
+        public static void BuildSupineCribMac()
+        {
+            SetExperimentMode();
+
+            string outputPath = GetArg("-outputPath", "Builds/AIB_SupineCrib.app");
+            var namedBuildTarget = NamedBuildTarget.Standalone;
+            int previousArchitecture = PlayerSettings.GetArchitecture(namedBuildTarget);
+
+            try
+            {
+                PlayerSettings.SetArchitecture(namedBuildTarget, (int)OSArchitecture.ARM64);
+
+                BuildPlayerOptions opts = new BuildPlayerOptions
+                {
+                    scenes = new[] { SupineCribSceneBuilder.ScenePath },
+                    locationPathName = outputPath,
+                    target = BuildTarget.StandaloneOSX,
+                    subtarget = (int)StandaloneBuildSubtarget.Player,
+                    options = BuildOptions.None
+                };
+
+                BuildReport report = BuildPipeline.BuildPlayer(opts);
+                if (report.summary.result != BuildResult.Succeeded)
+                {
+                    Debug.LogError($"[AIB] Supine crib build failed: {report.summary.totalErrors} error(s)");
+                    EditorApplication.Exit(1);
+                }
+                else
+                {
+                    Debug.Log($"[AIB] Supine crib build succeeded: {outputPath}");
+                }
+            }
+            finally
+            {
+                PlayerSettings.SetArchitecture(namedBuildTarget, previousArchitecture);
+            }
+        }
+
+        [MenuItem("AIB/Build/Build Supine Crib Body Schema (Linux)")]
+        public static void BuildSupineCribLinux()
+        {
+            SetExperimentMode();
+            EditorBuildSettingsScene[] previousScenes = EditorBuildSettings.scenes;
+
+            PlayerSettings.SetScriptingBackend(BuildTargetGroup.Standalone, ScriptingImplementation.Mono2x);
+
+            string outputPath = GetArg("-outputPath", "Builds/AIB_SupineCrib.x86_64");
+
+            try
+            {
+                SupineCribSceneBuilder.CreateOrUpdateScene();
+
+                BuildPlayerOptions opts = new BuildPlayerOptions
+                {
+                    scenes = new[] { SupineCribSceneBuilder.ScenePath },
+                    locationPathName = outputPath,
+                    target = BuildTarget.StandaloneLinux64,
+                    subtarget = (int)StandaloneBuildSubtarget.Player,
+                    options = BuildOptions.None
+                };
+
+                BuildReport report = BuildPipeline.BuildPlayer(opts);
+                if (report.summary.result != BuildResult.Succeeded)
+                {
+                    Debug.LogError($"[AIB] Linux supine crib build failed: {report.summary.totalErrors} error(s)");
+                    EditorApplication.Exit(1);
+                }
+                else
+                {
+                    EnsureLinuxGrpcPluginFlat(outputPath);
+                    Debug.Log($"[AIB] Linux supine crib build succeeded: {outputPath}");
+                }
+            }
+            finally
+            {
+                EditorBuildSettings.scenes = previousScenes;
+            }
+        }
+
+        private static void EnsureLinuxGrpcPluginFlat(string outputPath)
+        {
+            string buildDirectory = Path.GetDirectoryName(outputPath);
+            if (string.IsNullOrEmpty(buildDirectory))
+            {
+                buildDirectory = ".";
+            }
+
+            string buildName = Path.GetFileNameWithoutExtension(outputPath);
+            string pluginsDirectory = Path.Combine(buildDirectory, buildName + "_Data", "Plugins");
+            string flatPluginPath = Path.Combine(pluginsDirectory, "libgrpc_csharp_ext.x64.so");
+            string anyCpuPluginPath = Path.Combine(pluginsDirectory, "AnyCPU", "libgrpc_csharp_ext.x64.so");
+
+            if (File.Exists(flatPluginPath))
+            {
+                Debug.Log($"[AIB] Linux gRPC plugin already present: {flatPluginPath}");
+                return;
+            }
+
+            if (!File.Exists(anyCpuPluginPath))
+            {
+                Debug.LogWarning($"[AIB] Linux gRPC plugin not found at expected AnyCPU path: {anyCpuPluginPath}");
+                return;
+            }
+
+            Directory.CreateDirectory(pluginsDirectory);
+            File.Copy(anyCpuPluginPath, flatPluginPath, overwrite: true);
+            Debug.Log($"[AIB] Copied Linux gRPC plugin to flat Plugins path: {flatPluginPath}");
         }
 
         [MenuItem("AIB/Build/Check Current Mode")]

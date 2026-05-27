@@ -3,7 +3,9 @@
     "rootNamespace": "AIB.Editor",
     "references": [
         "AIB.Runtime",
-        "Scripts"
+        "Scripts",
+        "Unity.ML-Agents",
+        "Unity.ML-Agents.Editor"
     ],
     "includePlatforms": [
         "Editor"
