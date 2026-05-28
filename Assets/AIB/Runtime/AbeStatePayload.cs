@@ -60,6 +60,14 @@ namespace AIB
         public int tick;
         public string phase; // "WOMB", "POST-BIRTH", etc.
 
+        // ── Vocal / Babbling ──────────────────────────────────────
+        public float vocalPitch;
+        public float vocalVolume;
+        public float vocalFormant;
+        public bool  vocalGate;
+        public bool  vocalDistressCry;
+        public bool  hasVocalData;
+
         // ── Helpers ────────────────────────────────────────────────
 
         public Vector3 Position

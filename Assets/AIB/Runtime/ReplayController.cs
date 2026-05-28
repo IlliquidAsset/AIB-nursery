@@ -38,6 +38,7 @@ public class ReplayController : MonoBehaviour
 
     private readonly List<ReplayRow> _rows = new List<ReplayRow>();
     private ReplayManifest _manifest;
+    private VocalAudioPlayer _vocalAudio;
 
 #if UNITY_EDITOR && AIB_ENABLE_REPLAY_RECORDER
     private RecorderController _recorderController;
@@ -100,7 +101,50 @@ public class ReplayController : MonoBehaviour
             ValidateManifestCompatibility();
         }
 
+        PrepareVocalAudio();
+
         StartReplay();
+    }
+
+    private void PrepareVocalAudio()
+    {
+        _vocalAudio = FindFirstObjectByType<VocalAudioPlayer>();
+        if (_vocalAudio == null)
+        {
+            GameObject vocalObj = new GameObject("VocalAudioPlayer");
+            _vocalAudio = vocalObj.AddComponent<VocalAudioPlayer>();
+        }
+
+        if (_rows.Count == 0) return;
+
+        float totalDuration = _rows.Count * 0.08f;
+        _vocalAudio.PrepareClip(totalDuration);
+
+        bool anyVocalData = false;
+        foreach (ReplayRow row in _rows)
+        {
+            if (row.Payload == null) continue;
+
+            anyVocalData |= row.Payload.hasVocalData;
+            _vocalAudio.WriteSample(
+                row.Payload.vocalPitch,
+                row.Payload.vocalVolume,
+                row.Payload.vocalFormant,
+                row.Payload.vocalGate,
+                1
+            );
+        }
+
+        _vocalAudio.FinalizeClip();
+
+        if (!anyVocalData)
+        {
+            Debug.Log("[ReplayController] No vocal data in replay. Audio will be silent.");
+        }
+        else
+        {
+            Debug.Log("[ReplayController] Vocal audio prepared from replay data.");
+        }
     }
 
     private void Update()
@@ -383,11 +427,13 @@ public class ReplayController : MonoBehaviour
         if (_rows.Count == 0) return;
         IsPlaying = true;
         _nextStepTime = Time.unscaledTime;
+        _vocalAudio?.Play();
     }
 
     public void Pause()
     {
         IsPlaying = false;
+        _vocalAudio?.Stop();
     }
 
     public void ResetReplay()
@@ -396,6 +442,7 @@ public class ReplayController : MonoBehaviour
         IsPlaying = false;
         _currentIndex = 0;
         ApplyDirect(_rows[_currentIndex]);
+        _vocalAudio?.Stop();
     }
 
     public void SetSpeed(int presetIndex)
@@ -640,6 +687,14 @@ public class ReplayController : MonoBehaviour
         payload.tick = ParseInt(GetOptionalField(fields, header, "tick", "Tick"), rowIndex);
         string phase = GetOptionalField(fields, header, "phase", "Phase");
         payload.phase = string.IsNullOrWhiteSpace(phase) ? "REPLAY" : phase;
+
+        payload.vocalPitch = ParseFloat(GetOptionalField(fields, header, "vocal_pitch"), 0f);
+        payload.vocalVolume = ParseFloat(GetOptionalField(fields, header, "vocal_volume"), 0f);
+        payload.vocalFormant = ParseFloat(GetOptionalField(fields, header, "vocal_formant"), 2.5f);
+        payload.vocalGate = ParseBool(GetOptionalField(fields, header, "vocal_gate"), false);
+        payload.vocalDistressCry = ParseBool(GetOptionalField(fields, header, "vocal_distress_cry"), false);
+        payload.hasVocalData = TryGetIndex(header, "vocal_pitch", out _);
+
         return payload;
     }
 

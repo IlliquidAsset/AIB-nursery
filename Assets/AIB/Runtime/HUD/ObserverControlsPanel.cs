@@ -3,6 +3,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using AIB.Runtime;
 using TMPro;
 using UnityEngine;
 using UnityEngine.UI;
@@ -56,7 +57,8 @@ namespace AIB
             statusText.text =
                 $"Source: {source}    Selected: {selected}\n" +
                 $"{replay}\n" +
-                "Keys: Space play/pause · ←/→ step · Home reset · Tab camera · B HUD · R rescan";
+                $"Keys: Space play/pause · ←/→ step · Home reset · Tab camera · B HUD · R rescan" +
+                GetVocalStatus();
         }
 
         public void RefreshReplayList()
@@ -193,6 +195,13 @@ namespace AIB
             DirectoryInfo parent = Directory.GetParent(path);
             string name = parent != null ? parent.Name : Path.GetFileName(path);
             return $"{name}/{Path.GetFileName(path)}";
+        }
+
+        private string GetVocalStatus()
+        {
+            VocalAudioPlayer vocal = FindFirstObjectByType<VocalAudioPlayer>();
+            if (vocal == null) return "";
+            return vocal.HasVocalData ? "\n🔊 Vocal audio present" : "\n🔇 No vocal data in replay";
         }
 
         private TextMeshProUGUI CreateText(string name, Vector2 pos, Vector2 size, int fontSize, TextAlignmentOptions alignment)
