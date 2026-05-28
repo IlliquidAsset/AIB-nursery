@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Globalization;
 using System.IO;
 using AIB;
+using AIB.Runtime;
 using UnityEngine;
 
 #if UNITY_EDITOR && AIB_ENABLE_REPLAY_RECORDER
@@ -14,7 +15,9 @@ using UnityEditor.Recorder.Input;
 
 /// <summary>
 /// CSV replay controller for observer/standalone workflows.
+/// Priority -100 runs early to disable the arena system before Academy triggers an episode.
 /// </summary>
+[DefaultExecutionOrder(-100)]
 public class ReplayController : MonoBehaviour
 {
     [Header("Replay CSV")]
@@ -60,6 +63,12 @@ public class ReplayController : MonoBehaviour
     private void Awake()
     {
         ParseReplayCsvCliArg();
+
+        if (!string.IsNullOrWhiteSpace(replayCsvPath))
+        {
+            DisableArenaSystem();
+            EnsureReplayWindowSize();
+        }
     }
 
     private void Start()
@@ -125,6 +134,36 @@ public class ReplayController : MonoBehaviour
                     replayCsvPath = (i < args.Length - 1) ? args[i + 1] : replayCsvPath;
                     break;
             }
+        }
+    }
+
+    private void DisableArenaSystem()
+    {
+        MonoBehaviour[] allComponents = FindObjectsOfType<MonoBehaviour>();
+        int disabled = 0;
+
+        foreach (MonoBehaviour comp in allComponents)
+        {
+            if (comp == null) continue;
+
+            string typeName = comp.GetType().Name;
+
+            if (typeName == "TrainingArena" || typeName == "TrainingAgent" || typeName == "Academy")
+            {
+                comp.enabled = false;
+                disabled++;
+            }
+        }
+
+        Debug.Log($"[ReplayController] Disabled {disabled} arena components. Observer replay mode active.");
+    }
+
+    private void EnsureReplayWindowSize()
+    {
+        if (Screen.width < 640 || Screen.height < 480)
+        {
+            Screen.SetResolution(1280, 720, FullScreenMode.Windowed);
+            Debug.Log("[ReplayController] Set replay window to 1280x720 windowed.");
         }
     }
 
@@ -297,6 +336,7 @@ public class ReplayController : MonoBehaviour
             return false;
         }
 
+        Debug.Log($"ReplayController: Replay CSV loaded: {replayCsvPath} rows={_rows.Count}");
         return true;
     }
 
