@@ -41,6 +41,23 @@ namespace AIB.Runtime
             return entry != null;
         }
 
+        public void RegisterStage(StageEntry entry)
+        {
+            if (entry == null || string.IsNullOrWhiteSpace(entry.stageId))
+                return;
+
+            for (int i = 0; i < _stages.Count; i++)
+            {
+                if (string.Equals(_stages[i].stageId, entry.stageId, StringComparison.OrdinalIgnoreCase))
+                {
+                    _stages[i] = entry;
+                    return;
+                }
+            }
+
+            _stages.Add(entry);
+        }
+
 #if UNITY_EDITOR
         [ContextMenu("Register Crib Stage")]
         private void RegisterCribStage()

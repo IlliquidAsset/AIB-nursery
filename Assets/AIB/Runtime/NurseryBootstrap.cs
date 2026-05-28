@@ -62,10 +62,23 @@ namespace AIB.Runtime
 
         if (registry == null)
         {
-            Debug.LogWarning("[NurseryBootstrap] Registry not found via Resources. Searching all loaded assets...");
             NurseryStageRegistry[] all = Resources.FindObjectsOfTypeAll<NurseryStageRegistry>();
             if (all != null && all.Length > 0)
                 registry = all[0];
+        }
+
+        if (registry == null)
+        {
+            Debug.Log("[NurseryBootstrap] No registry asset found; creating hardcoded fallback with crib stage.");
+            registry = ScriptableObject.CreateInstance<NurseryStageRegistry>();
+            registry.RegisterStage(new StageEntry
+            {
+                stageId = "crib_1x1",
+                stageVersion = 1,
+                sceneName = "SupineCribBodySchema",
+                scenePath = "Assets/AIB/Scenes/SupineCribBodySchema.unity",
+                behaviorName = "AIBCribBodySchema",
+            });
         }
 
         return registry;
