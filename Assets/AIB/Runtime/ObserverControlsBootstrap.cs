@@ -32,17 +32,8 @@ namespace AIB
 
         private void Update()
         {
-            ReplayController replay = FindFirstObjectByType<ReplayController>();
             if (Input.GetKeyDown(KeyCode.Tab)) cameraMode = (ObserverCameraMode)(((int)cameraMode + 1) % 5);
             if (Input.GetKeyDown(KeyCode.B)) overlayVisible = !overlayVisible;
-            if (Input.GetKeyDown(KeyCode.Space))
-            {
-                if (replay != null && replay.IsPlaying) replay.Pause();
-                else replay?.Play();
-            }
-            if (Input.GetKeyDown(KeyCode.RightArrow)) replay?.StepForward();
-            if (Input.GetKeyDown(KeyCode.LeftArrow)) replay?.StepBackward();
-            if (Input.GetKeyDown(KeyCode.Home)) replay?.ResetReplay();
         }
 
         private void LateUpdate()

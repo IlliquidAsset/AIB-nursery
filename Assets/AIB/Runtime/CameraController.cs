@@ -57,8 +57,6 @@ namespace AIB
 
         private GameObject watermarkObj;
         private TextMeshProUGUI watermarkText;
-        private string[] replayFiles = Array.Empty<string>();
-        private int replayIndex;
 
         private void Awake()
         {
@@ -107,11 +105,6 @@ namespace AIB
             UpdateWatermark();
         }
 
-        private void OnGUI()
-        {
-            DrawObserverControls();
-        }
-
         private void LateUpdate()
         {
             UpdateCameraPosition();
@@ -128,109 +121,6 @@ namespace AIB
             {
                 ToggleBroadcastMode();
             }
-        }
-
-        private void DrawObserverControls()
-        {
-            const float panelWidth = 620f;
-            const float panelHeight = 92f;
-            Rect panel = new Rect((Screen.width - panelWidth) * 0.5f, Screen.height - panelHeight - 16f, panelWidth, panelHeight);
-            GUI.Box(panel, string.Empty);
-
-            ReplayController replay = FindFirstObjectByType<ReplayController>();
-            AbeStateReceiver receiver = FindFirstObjectByType<AbeStateReceiver>();
-            if (replayFiles.Length == 0)
-            {
-                replayFiles = DiscoverReplayFiles();
-            }
-
-            string source = replay != null && replay.IsLoaded ? "Replay" : "Live";
-            string replayName = replayFiles.Length > 0 ? Path.GetFileName(replayFiles[Mathf.Clamp(replayIndex, 0, replayFiles.Length - 1)]) : "no CSV replays found";
-            GUI.Label(new Rect(panel.x + 12f, panel.y + 8f, panelWidth - 24f, 22f), $"Observer Source: {source} | {replayName}");
-
-            float x = panel.x + 12f;
-            float y = panel.y + 36f;
-            if (GUI.Button(new Rect(x, y, 66f, 26f), "Live"))
-            {
-                receiver?.SetReceivingEnabled(true);
-                replay?.Pause();
-            }
-            x += 72f;
-            if (GUI.Button(new Rect(x, y, 66f, 26f), "Prev"))
-            {
-                CycleReplay(-1);
-            }
-            x += 72f;
-            if (GUI.Button(new Rect(x, y, 66f, 26f), "Next"))
-            {
-                CycleReplay(1);
-            }
-            x += 72f;
-            if (GUI.Button(new Rect(x, y, 66f, 26f), "Load"))
-            {
-                LoadSelectedReplay(replay, receiver);
-            }
-            x += 72f;
-            if (GUI.Button(new Rect(x, y, 66f, 26f), "Play")) replay?.Play();
-            x += 72f;
-            if (GUI.Button(new Rect(x, y, 66f, 26f), "Pause")) replay?.Pause();
-            x += 72f;
-            if (GUI.Button(new Rect(x, y, 66f, 26f), "Step")) replay?.StepForward();
-            x += 72f;
-            if (GUI.Button(new Rect(x, y, 66f, 26f), "Reset")) replay?.ResetReplay();
-
-            GUI.Label(new Rect(panel.x + 12f, panel.y + 66f, panelWidth - 24f, 20f), "Keys: Tab camera | B overlay | Space play/pause | ←/→ step | Home reset");
-        }
-
-        private string[] DiscoverReplayFiles()
-        {
-            var files = new List<string>();
-            foreach (string root in ReplaySearchRoots())
-            {
-                try
-                {
-                    if (!Directory.Exists(root)) continue;
-                    files.AddRange(Directory.GetFiles(root, "*.csv", SearchOption.AllDirectories));
-                }
-                catch (Exception e)
-                {
-                    Debug.LogWarning($"[CameraController] Replay scan failed for {root}: {e.Message}");
-                }
-            }
-            files.Sort(StringComparer.OrdinalIgnoreCase);
-            return files.ToArray();
-        }
-
-        private IEnumerable<string> ReplaySearchRoots()
-        {
-            string[] args = Environment.GetCommandLineArgs();
-            for (int i = 0; i < args.Length - 1; i++)
-            {
-                if (args[i] == "--replayDir") yield return args[i + 1];
-            }
-            string envReplayDir = Environment.GetEnvironmentVariable("AIB_REPLAY_DIR");
-            if (!string.IsNullOrWhiteSpace(envReplayDir)) yield return envReplayDir;
-            yield return Path.Combine(Application.dataPath, "..", "..", "..", "ObservationLogs");
-            yield return Path.Combine(Application.dataPath, "..", "..", "..", "Builds", "Replays");
-            yield return "/Users/kendrick/Documents/dev/AIB/logs";
-        }
-
-        private void CycleReplay(int delta)
-        {
-            if (replayFiles.Length == 0)
-            {
-                replayFiles = DiscoverReplayFiles();
-            }
-            if (replayFiles.Length == 0) return;
-            replayIndex = (replayIndex + delta + replayFiles.Length) % replayFiles.Length;
-        }
-
-        private void LoadSelectedReplay(ReplayController replay, AbeStateReceiver receiver)
-        {
-            if (replay == null || replayFiles.Length == 0) return;
-            receiver?.SetReceivingEnabled(false);
-            replay.LoadReplayCsv(replayFiles[Mathf.Clamp(replayIndex, 0, replayFiles.Length - 1)]);
-            replay.Pause();
         }
 
         // Public entry so AbeAutoSmokeCapture and remote drivers can flip
