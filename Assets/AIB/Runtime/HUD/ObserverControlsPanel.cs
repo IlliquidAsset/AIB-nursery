@@ -11,11 +11,12 @@ namespace AIB
 {
     public class ObserverControlsPanel : MonoBehaviour
     {
-        private readonly List<string> replayPaths = new List<string>();
-        private TextMeshProUGUI statusText;
-        private ReplayController replayController;
-        private AbeStateReceiver stateReceiver;
-        private int selectedReplayIndex;
+    private readonly List<string> replayPaths = new List<string>();
+    private TextMeshProUGUI statusText;
+    private ReplayController replayController;
+    private AbeStateReceiver stateReceiver;
+    private int selectedReplayIndex;
+    private Slider scrubSlider;
 
         private void Awake()
         {
@@ -33,6 +34,11 @@ namespace AIB
             if (Input.GetKeyDown(KeyCode.R))
             {
                 RefreshReplayList();
+            }
+
+            if (scrubSlider != null && replayController != null && replayController.IsLoaded)
+            {
+                scrubSlider.SetValueWithoutNotify(replayController.NormalizedPosition);
             }
 
             var buffer = AbeStateBuffer.Instance;
@@ -112,6 +118,16 @@ namespace AIB
             CreateButton("Pause", new Vector2(88, -96), () => FindReplay()?.Pause());
             CreateButton("Step", new Vector2(164, -96), () => FindReplay()?.StepForward());
             CreateButton("Reset", new Vector2(240, -96), () => FindReplay()?.ResetReplay());
+
+            scrubSlider = CreateSlider("ReplayScrub", new Vector2(12, -130), new Vector2(300, 20), (float v) =>
+            {
+                FindReplay()?.Seek(v);
+            });
+
+            CreateSpeedButton("0.5x", new Vector2(324, -96), 0);
+            CreateSpeedButton("1x", new Vector2(380, -96), 1);
+            CreateSpeedButton("2x", new Vector2(436, -96), 2);
+            CreateSpeedButton("5x", new Vector2(492, -96), 3);
         }
 
         private void FindComponents()
@@ -222,6 +238,34 @@ namespace AIB
             text.rectTransform.offsetMin = Vector2.zero;
             text.rectTransform.offsetMax = Vector2.zero;
             text.text = label;
+        }
+
+        private Slider CreateSlider(string name, Vector2 pos, Vector2 size, UnityEngine.Events.UnityAction<float> onValueChanged)
+        {
+            GameObject obj = new GameObject(name);
+            obj.transform.SetParent(transform, false);
+            RectTransform rt = obj.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0, 1);
+            rt.anchorMax = new Vector2(0, 1);
+            rt.pivot = new Vector2(0, 1);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = size;
+
+            Slider slider = obj.AddComponent<Slider>();
+            slider.minValue = 0f;
+            slider.maxValue = 1f;
+            slider.onValueChanged.AddListener(onValueChanged);
+
+            return slider;
+        }
+
+        private void CreateSpeedButton(string label, Vector2 pos, int speedIndex)
+        {
+            CreateButton(label, pos, () =>
+            {
+                ReplayController r = FindReplay();
+                if (r != null) r.SetSpeed(speedIndex);
+            });
         }
     }
 }

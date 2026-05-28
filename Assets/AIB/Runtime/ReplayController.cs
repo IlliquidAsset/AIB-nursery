@@ -27,6 +27,10 @@ public class ReplayController : MonoBehaviour
     [SerializeField] private bool autoplayOnStart = true;
     [SerializeField] private float secondsPerStep = 0.08f;
 
+    [Header("Replay Speeds")]
+    [SerializeField] private float[] speedPresets = { 0.5f, 1f, 2f, 5f };
+    [SerializeField] private int defaultSpeedIndex = 1;
+
     [Header("Scene References (optional)")]
     [SerializeField] private Transform agentTransform;
     [SerializeField] private GameObject motherGameObject;
@@ -44,12 +48,18 @@ public class ReplayController : MonoBehaviour
     private bool _replayStarted;
     private int _currentIndex;
     private float _nextStepTime;
+    private int _speedIndex;
 
     public bool IsLoaded => _rows.Count > 0;
     public bool IsPlaying { get; private set; }
     public int CurrentIndex => _currentIndex;
     public int RowCount => _rows.Count;
     public string CurrentReplayPath => replayCsvPath;
+    public float Speed => _speedIndex >= 0 && _speedIndex < speedPresets.Length ? speedPresets[_speedIndex] : 1f;
+    public int SpeedIndex => _speedIndex;
+    public float NormalizedPosition => _rows.Count > 1 ? (float)_currentIndex / (_rows.Count - 1) : 0f;
+    public int SpeedPresetCount => speedPresets.Length;
+    public float GetSpeedPreset(int index) => index >= 0 && index < speedPresets.Length ? speedPresets[index] : 1f;
 
     private struct ReplayRow
     {
@@ -120,7 +130,7 @@ public class ReplayController : MonoBehaviour
         }
 
         StepForward();
-        _nextStepTime = Time.unscaledTime + Mathf.Max(0.01f, secondsPerStep);
+        _nextStepTime = Time.unscaledTime + Mathf.Max(0.01f, secondsPerStep / Speed);
     }
 
     private void ParseReplayCsvCliArg()
@@ -348,11 +358,12 @@ public class ReplayController : MonoBehaviour
         }
 
         _replayStarted = true;
+        _speedIndex = defaultSpeedIndex;
         ConfigureAndStartRecorder();
         _currentIndex = 0;
         ApplyDirect(_rows[0]);
         IsPlaying = autoplayOnStart;
-        _nextStepTime = Time.unscaledTime + Mathf.Max(0.01f, secondsPerStep);
+        _nextStepTime = Time.unscaledTime + Mathf.Max(0.01f, secondsPerStep / Speed);
     }
 
     public bool LoadReplayCsv(string path)
@@ -385,6 +396,21 @@ public class ReplayController : MonoBehaviour
         IsPlaying = false;
         _currentIndex = 0;
         ApplyDirect(_rows[_currentIndex]);
+    }
+
+    public void SetSpeed(int presetIndex)
+    {
+        _speedIndex = Mathf.Clamp(presetIndex, 0, speedPresets.Length - 1);
+    }
+
+    public void Seek(float normalizedPosition)
+    {
+        if (_rows.Count == 0) return;
+
+        normalizedPosition = Mathf.Clamp01(normalizedPosition);
+        _currentIndex = Mathf.Clamp(Mathf.RoundToInt(normalizedPosition * (_rows.Count - 1)), 0, _rows.Count - 1);
+        ApplyDirect(_rows[_currentIndex]);
+        _nextStepTime = Time.unscaledTime;
     }
 
     public void StepForward()
