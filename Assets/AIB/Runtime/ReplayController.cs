@@ -30,6 +30,7 @@ public class ReplayController : MonoBehaviour
     [SerializeField] private Camera observerCameraNE;
 
     private readonly List<ReplayRow> _rows = new List<ReplayRow>();
+    private ReplayManifest _manifest;
 
 #if UNITY_EDITOR && AIB_ENABLE_REPLAY_RECORDER
     private RecorderController _recorderController;
@@ -68,9 +69,16 @@ public class ReplayController : MonoBehaviour
             return;
         }
 
+        _manifest = ReplayManifest.Load(replayCsvPath);
+
         if (!LoadCsvRows())
         {
             return;
+        }
+
+        if (_manifest != null)
+        {
+            ValidateManifestCompatibility();
         }
 
         StartReplay();
@@ -118,6 +126,40 @@ public class ReplayController : MonoBehaviour
                     break;
             }
         }
+    }
+
+    private void ValidateManifestCompatibility()
+    {
+        if (_manifest == null) return;
+
+        if (!_manifest.IsValid(out string invalidReason))
+        {
+            Debug.LogWarning($"[ReplayController] Manifest invalid: {invalidReason}");
+            return;
+        }
+
+        string currentScene = UnityEngine.SceneManagement.SceneManager.GetActiveScene().name;
+        string expectedScene = _manifest.stage.scene_name;
+
+        System.Text.StringBuilder notice = new System.Text.StringBuilder();
+        notice.AppendLine($"[ReplayController] Replay recorded with: {_manifest.recorded_with?.binary_name ?? "unknown"} ({_manifest.recorded_with?.platform ?? "unknown"})");
+
+        if (!string.Equals(currentScene, expectedScene, StringComparison.OrdinalIgnoreCase))
+        {
+            Debug.LogWarning($"[ReplayController] Stage mismatch: replay expects '{expectedScene}' but Observer is in '{currentScene}'. Visual fidelity not guaranteed.");
+            notice.AppendLine($"Stage mismatch: replay expects '{expectedScene}', Observer is in '{currentScene}'.");
+        }
+        else
+        {
+            notice.AppendLine($"Stage match: {expectedScene} (v{_manifest.stage.stage_version})");
+        }
+
+        if (_manifest.schemas != null)
+        {
+            notice.AppendLine($"Telemetry schema v{_manifest.schemas.telemetry_schema_version}, Agent state schema v{_manifest.schemas.agent_state_schema_version}");
+        }
+
+        Debug.Log(notice.ToString());
     }
 
     private bool ResolveReferences()

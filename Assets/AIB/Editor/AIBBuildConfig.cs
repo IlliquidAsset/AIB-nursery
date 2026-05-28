@@ -2,9 +2,12 @@
 using UnityEditor;
 using UnityEditor.Build;
 using UnityEditor.Build.Reporting;
+using UnityEditor.SceneManagement;
 using UnityEngine;
+using UnityEngine.SceneManagement;
 using System.Collections.Generic;
 using System.IO;
+using AIB.Runtime;
 
 namespace AIB.Editor
 {
@@ -251,6 +254,142 @@ namespace AIB.Editor
             {
                 EditorBuildSettings.scenes = previousScenes;
             }
+        }
+
+        [MenuItem("AIB/Build/Build Nursery (Linux)")]
+        public static void BuildNurseryLinux()
+        {
+            SetExperimentMode();
+
+            PlayerSettings.SetScriptingBackend(BuildTargetGroup.Standalone, ScriptingImplementation.Mono2x);
+
+            string outputPath = GetArg("-outputPath", "Builds/AIB_Nursery.x86_64");
+            EditorBuildSettingsScene[] previousScenes = EditorBuildSettings.scenes;
+
+            try
+            {
+                SupineCribSceneBuilder.CreateOrUpdateScene();
+                string[] nurseryScenes = CollectNurseryScenes();
+                EditorBuildSettings.scenes = ToBuildSettings(nurseryScenes);
+
+                BuildPlayerOptions opts = new BuildPlayerOptions
+                {
+                    scenes = nurseryScenes,
+                    locationPathName = outputPath,
+                    target = BuildTarget.StandaloneLinux64,
+                    subtarget = (int)StandaloneBuildSubtarget.Player,
+                    options = BuildOptions.None
+                };
+
+                BuildReport report = BuildPipeline.BuildPlayer(opts);
+                if (report.summary.result != BuildResult.Succeeded)
+                {
+                    Debug.LogError($"[AIB] Nursery Linux build failed: {report.summary.totalErrors} error(s)");
+                    EditorApplication.Exit(1);
+                }
+                else
+                {
+                    EnsureLinuxGrpcPluginFlat(outputPath);
+                    Debug.Log($"[AIB] Nursery Linux build succeeded: {outputPath}");
+                }
+            }
+            finally
+            {
+                EditorBuildSettings.scenes = previousScenes;
+            }
+        }
+
+        [MenuItem("AIB/Build/Build Nursery (macOS)")]
+        public static void BuildNurseryMac()
+        {
+            SetExperimentMode();
+
+            string outputPath = GetArg("-outputPath", "Builds/AIB_Nursery.app");
+            var namedBuildTarget = NamedBuildTarget.Standalone;
+            int previousArchitecture = PlayerSettings.GetArchitecture(namedBuildTarget);
+            EditorBuildSettingsScene[] previousScenes = EditorBuildSettings.scenes;
+
+            try
+            {
+                PlayerSettings.SetArchitecture(namedBuildTarget, (int)OSArchitecture.ARM64);
+                SupineCribSceneBuilder.CreateOrUpdateScene();
+                string[] nurseryScenes = CollectNurseryScenes();
+                EditorBuildSettings.scenes = ToBuildSettings(nurseryScenes);
+
+                BuildPlayerOptions opts = new BuildPlayerOptions
+                {
+                    scenes = nurseryScenes,
+                    locationPathName = outputPath,
+                    target = BuildTarget.StandaloneOSX,
+                    subtarget = (int)StandaloneBuildSubtarget.Player,
+                    options = BuildOptions.None
+                };
+
+                BuildReport report = BuildPipeline.BuildPlayer(opts);
+                if (report.summary.result != BuildResult.Succeeded)
+                {
+                    Debug.LogError($"[AIB] Nursery macOS build failed: {report.summary.totalErrors} error(s)");
+                    EditorApplication.Exit(1);
+                }
+                else
+                {
+                    Debug.Log($"[AIB] Nursery macOS build succeeded: {outputPath}");
+                }
+            }
+            finally
+            {
+                PlayerSettings.SetArchitecture(namedBuildTarget, previousArchitecture);
+                EditorBuildSettings.scenes = previousScenes;
+            }
+        }
+
+        private static string[] CollectNurseryScenes()
+        {
+            var scenes = new System.Collections.Generic.List<string>();
+
+            string bootstrapScene = "Assets/AIB/Scenes/NurseryBootstrap.unity";
+            EnsureBootstrapScene(bootstrapScene);
+            scenes.Add(bootstrapScene);
+
+            foreach (EditorBuildSettingsScene scene in EditorBuildSettings.scenes)
+            {
+                if (scene.enabled && scene.path != bootstrapScene)
+                    scenes.Add(scene.path);
+            }
+
+            if (scenes.Count == 0)
+            {
+                Debug.LogError("[AIB] No nursery scenes found. Run AIB/Crib/Create Supine Crib Scene first.");
+                EditorApplication.Exit(1);
+            }
+
+            Debug.Log($"[AIB] Nursery scenes ({scenes.Count}): {string.Join(", ", scenes)}");
+            return scenes.ToArray();
+        }
+
+        private static EditorBuildSettingsScene[] ToBuildSettings(string[] scenePaths)
+        {
+            var list = new System.Collections.Generic.List<EditorBuildSettingsScene>();
+            foreach (string path in scenePaths)
+                list.Add(new EditorBuildSettingsScene(path, true));
+            return list.ToArray();
+        }
+
+        private static void EnsureBootstrapScene(string scenePath)
+        {
+            if (File.Exists(scenePath))
+                return;
+
+            Directory.CreateDirectory(Path.GetDirectoryName(scenePath));
+            Scene scene = EditorSceneManager.NewScene(NewSceneSetup.EmptyScene, NewSceneMode.Single);
+            scene.name = "NurseryBootstrap";
+
+            GameObject bootstrapObject = new GameObject("NurseryBootstrap");
+            bootstrapObject.AddComponent<NurseryBootstrap>();
+
+            EditorSceneManager.SaveScene(scene, scenePath);
+            AssetDatabase.SaveAssets();
+            Debug.Log($"[AIB] Bootstrap scene created: {scenePath}");
         }
 
         private static void EnsureLinuxGrpcPluginFlat(string outputPath)
