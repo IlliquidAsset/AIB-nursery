@@ -18,6 +18,7 @@ namespace AIB
     private AbeStateReceiver stateReceiver;
     private int selectedReplayIndex;
     private Slider scrubSlider;
+    private OverlayManager overlayManager;
 
         private void Awake()
         {
@@ -130,6 +131,21 @@ namespace AIB
             CreateSpeedButton("1x", new Vector2(380, -96), 1);
             CreateSpeedButton("2x", new Vector2(436, -96), 2);
             CreateSpeedButton("5x", new Vector2(492, -96), 3);
+
+            CreateButton("All", new Vector2(12, -164), () => overlayManager?.ShowAll());
+            CreateButton("None", new Vector2(88, -164), () => overlayManager?.HideAll());
+            CreateAlphaSlider(new Vector2(170, -164));
+
+            overlayManager = FindFirstObjectByType<OverlayManager>();
+            if (overlayManager != null)
+            {
+                for (int i = 0; i < overlayManager.OverlayCount && i < 8; i++)
+                {
+                    float x = 300 + i * 68;
+                    string name = overlayManager.GetOverlayName(i);
+                    CreateButton(name, new Vector2(x, -164), () => overlayManager.ToggleOverlay(name));
+                }
+            }
         }
 
         private void FindComponents()
@@ -275,6 +291,24 @@ namespace AIB
                 ReplayController r = FindReplay();
                 if (r != null) r.SetSpeed(speedIndex);
             });
+        }
+
+        private void CreateAlphaSlider(Vector2 pos)
+        {
+            GameObject obj = new GameObject("AlphaSlider");
+            obj.transform.SetParent(transform, false);
+            RectTransform rt = obj.AddComponent<RectTransform>();
+            rt.anchorMin = new Vector2(0, 1);
+            rt.anchorMax = new Vector2(0, 1);
+            rt.pivot = new Vector2(0, 1);
+            rt.anchoredPosition = pos;
+            rt.sizeDelta = new Vector2(100, 20);
+
+            Slider slider = obj.AddComponent<Slider>();
+            slider.minValue = 0.1f;
+            slider.maxValue = 1f;
+            slider.value = 0.85f;
+            slider.onValueChanged.AddListener(v => overlayManager?.SetAlpha(v));
         }
     }
 }
